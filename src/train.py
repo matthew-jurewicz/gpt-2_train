@@ -45,56 +45,57 @@ if __name__ == '__main__':
         hparams.parse_json(f.read())
 
     with tf.get_default_graph().as_default():
-        batch_size = 32#NOTE: reduce batch size if OOM
-        seq_len = hparams.n_embd
-        vocab_size = hparams.n_vocab
-        inputs = tf.placeholder(tf.int32, (None, seq_len))
-        logits = model(hparams, inputs)['logits']
-
-        learn_rate = 6.25e-5
-        drop_rate = .1
-        labels = tf.placeholder(tf.int32, (None, seq_len, vocab_size))
-        xentropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=logits))
-        train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(xentropy)
-
-        def load_data(data_dir, bpe):
-            text = ''
-            for filename in os.listdir(data_dir):
-                filepath = os.path.join(data_dir, filename)
-                with open(filepath, 'r') as f:
-                    text += f.read()
-                    text += '\r\n'
-            data = bpe.encode(text)
-
-            return data
-
-        data_dir = os.path.join(root_dir, 'data')
-        bpe = get_encoder(model_name, models_dir)
-        train_dir = os.path.join(data_dir, 'train')
-        test_dir = os.path.join(data_dir, 'test')
-        train_data = load_data(train_dir, bpe)
-        test_data = load_data(test_dir, bpe)
-
-        init_op = tf.global_variables_initializer()
-        saver = tf.train.Saver(var_list=tf.trainable_variables(scope='model'))
-        ckpt_filepath = os.path.join(models_dir, model_name, 'model.ckpt')
         with tf.Session() as sess:
-            sess.run(init_op)
-            saver.restore(sess, ckpt_filepath)
+            with sess.as_default():
+                batch_size = 32#NOTE: reduce batch size if OOM
+                seq_len = hparams.n_embd
+                vocab_size = hparams.n_vocab
+                inputs = tf.placeholder(tf.int32, (None, seq_len))
+                logits = model(hparams, inputs)['logits']
 
-            nepochs = 100
-            for i in range(nepochs):
-                for x, y in get_batch(train_data, batch_size, seq_len, vocab_size):
-                    _, loss = sess.run([train_op, xentropy], feed_dict={inputs:x, labels:y, 'drop_rate:0':drop_rate})
+                learn_rate = 6.25e-5
+                drop_rate = .1
+                labels = tf.placeholder(tf.int32, (None, seq_len, vocab_size))
+                xentropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=logits))
+                train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(xentropy)
 
-                val_loss = 0
-                count = 0
-                for x, y in get_batch(test_data, batch_size, seq_len, vocab_size):
-                    val_loss += sess.run([xentropy], feed_dict={inputs:x, labels:y})[0]
-                    count += 1
-                val_loss /= count
+                def load_data(data_dir, bpe):
+                    text = ''
+                    for filename in os.listdir(data_dir):
+                        filepath = os.path.join(data_dir, filename)
+                        with open(filepath, 'r') as f:
+                            text += f.read()
+                            text += '\r\n'
+                    data = bpe.encode(text)
 
-                print('epoch {}: loss -> {:.4f}\t\tval_loss -> {:.4f}'.format(i + 1, loss, val_loss))
-                save_path = saver.save(sess, ckpt_filepath, global_step=i)
-                print(save_path)
-                sys.stdout.flush()
+                    return data
+
+                data_dir = os.path.join(root_dir, 'data')
+                bpe = get_encoder(model_name, models_dir)
+                train_dir = os.path.join(data_dir, 'train')
+                test_dir = os.path.join(data_dir, 'test')
+                train_data = load_data(train_dir, bpe)
+                test_data = load_data(test_dir, bpe)
+
+                init_op = tf.global_variables_initializer()
+                saver = tf.train.Saver(var_list=tf.trainable_variables(scope='model'))
+                ckpt_filepath = os.path.join(models_dir, model_name, 'model.ckpt')
+                sess.run(init_op)
+                saver.restore(sess, ckpt_filepath)
+
+                nepochs = 100
+                for i in range(nepochs):
+                    for x, y in get_batch(train_data, batch_size, seq_len, vocab_size):
+                        _, loss = sess.run([train_op, xentropy], feed_dict={inputs:x, labels:y, 'drop_rate:0':drop_rate})
+
+                    val_loss = 0
+                    count = 0
+                    for x, y in get_batch(test_data, batch_size, seq_len, vocab_size):
+                        val_loss += sess.run([xentropy], feed_dict={inputs:x, labels:y})[0]
+                        count += 1
+                    val_loss /= count
+
+                    print('epoch {}: loss -> {:.4f}\t\tval_loss -> {:.4f}'.format(i + 1, loss, val_loss))
+                    save_path = saver.save(sess, ckpt_filepath, global_step=i)
+                    print(save_path)
+                    sys.stdout.flush()

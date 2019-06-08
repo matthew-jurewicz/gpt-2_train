@@ -151,6 +151,7 @@ def positions_for(tokens, past_length):
 
 
 def model(hparams, X, past=None, scope='model', reuse=False):
+    gpus = [device for device in tf.get_default_session().list_devices() if device.device_type == 'GPU']
     drop_rate = tf.placeholder_with_default(tf.constant(0, dtype=tf.float32), [], name='drop_rate')
     
     with tf.variable_scope(scope, reuse=reuse):
@@ -168,9 +169,12 @@ def model(hparams, X, past=None, scope='model', reuse=False):
         presents = []
         pasts = tf.unstack(past, axis=1) if past is not None else [None] * hparams.n_layer
         assert len(pasts) == hparams.n_layer
+        i = 0
         for layer, past in enumerate(pasts):
-            h, present = block(h, 'h%d' % layer, past=past, hparams=hparams)
-            presents.append(present)
+            with tf.device(gpus[i].name):
+                h, present = block(h, 'h%d' % layer, past=past, hparams=hparams)
+                presents.append(present)
+                i = (i + 1) % len(gpus)
         results['present'] = tf.stack(presents, axis=1)
         h = norm(h, 'ln_f')
 
