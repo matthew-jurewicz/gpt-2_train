@@ -45,17 +45,23 @@ if __name__ == '__main__':
         hparams.parse_json(f.read())
 
     with tf.get_default_graph().as_default():
-        batch_size = 32#NOTE: reduce batch size if OOM
-        seq_len = hparams.n_embd
-        vocab_size = hparams.n_vocab
-        inputs = tf.placeholder(tf.int32, (None, seq_len))
-        logits = model(hparams, inputs)['logits']
+        tpu = 'grpc://ip.address.of.tpu:8470'
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu)
+        tf.tpu.experimental.initialize_tpu_system(resolver)
+        tpu_strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
-        learn_rate = 6.25e-5
-        drop_rate = .1
-        labels = tf.placeholder(tf.int32, (None, seq_len, vocab_size))
-        xentropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=logits))
-        train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(xentropy)
+        with tpu_strategy.scope():
+            batch_size = 32#NOTE: reduce batch size if OOM
+            seq_len = hparams.n_embd
+            vocab_size = hparams.n_vocab
+            inputs = tf.placeholder(tf.int32, (None, seq_len))
+            logits = model(hparams, inputs)['logits']
+
+            learn_rate = 6.25e-5
+            drop_rate = .1
+            labels = tf.placeholder(tf.int32, (None, seq_len, vocab_size))
+            xentropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=labels, logits=logits))
+            train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(xentropy)
 
         def load_data(data_dir, bpe):
             text = ''
